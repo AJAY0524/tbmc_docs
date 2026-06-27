@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>推薦論文查詢系統 — 運作流程說明</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    mermaid.initialize({ startOnLoad: true, theme: 'base', themeVariables: {
+      primaryColor: '#e8f0fe', primaryBorderColor: '#3b6fd6', primaryTextColor: '#1a2b4a',
+      lineColor: '#6b7c9e', fontFamily: '"Noto Sans TC", system-ui, sans-serif', fontSize: '15px'
+    }});
+  });
+</script>
+<style>
+  :root{
+    --bg:#f6f8fc; --ink:#1a2b4a; --muted:#5b6b86; --line:#dce3ef;
+    --blue:#3b6fd6; --blue-d:#27508f; --teal:#0f9b8e; --amber:#e0a106;
+    --green:#1f9d57; --red:#d6453b; --grey:#8a97ad; --card:#ffffff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Noto Sans TC",-apple-system,"PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+    line-height:1.75;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1040px;margin:0 auto;padding:0 24px 80px}
+  header.hero{background:linear-gradient(135deg,#27508f,#3b6fd6 60%,#0f9b8e);color:#fff;
+    padding:54px 24px 46px;text-align:center;margin-bottom:38px;
+    box-shadow:0 10px 30px rgba(39,80,143,.25)}
+  header.hero h1{margin:0 0 8px;font-size:30px;letter-spacing:.5px}
+  header.hero p{margin:0;opacity:.92;font-size:16px}
+  header.hero .tag{display:inline-block;margin-top:16px;background:rgba(255,255,255,.18);
+    padding:5px 14px;border-radius:20px;font-size:13px}
+  h2{font-size:22px;margin:46px 0 14px;padding-left:13px;border-left:5px solid var(--blue)}
+  h3{font-size:17px;margin:26px 0 10px;color:var(--blue-d)}
+  p{margin:10px 0}
+  .sub{color:var(--muted);font-size:14.5px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:22px 24px;margin:16px 0;box-shadow:0 2px 10px rgba(26,43,74,.04)}
+  .mermaid{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:20px;margin:18px 0;text-align:center;overflow-x:auto}
+  /* 兩表關係視覺 */
+  .tables{display:flex;gap:20px;flex-wrap:wrap;align-items:stretch}
+  .tbl{flex:1;min-width:280px;border-radius:14px;padding:20px;border:2px solid}
+  .tbl.req{border-color:var(--blue);background:#eef3fc}
+  .tbl.pq{border-color:var(--teal);background:#e7f7f4}
+  .tbl h4{margin:0 0 4px;font-size:16px}
+  .tbl .code{font-family:ui-monospace,Menlo,monospace;font-size:13px;color:var(--muted)}
+  .tbl ul{margin:10px 0 0;padding-left:18px;font-size:14px}
+  .rel{display:flex;align-items:center;justify-content:center;color:var(--muted);
+    font-size:13px;font-weight:600;padding:6px}
+  /* 欄位來源對應 */
+  .fmap{display:flex;gap:18px;flex-wrap:wrap}
+  .fcol{flex:1;min-width:260px;border-radius:12px;padding:18px;border:1px solid var(--line)}
+  .fcol.list{background:#eef7ee;border-color:#bfe3bf}
+  .fcol.detail{background:#fdf3e3;border-color:#f0d79a}
+  .chip{display:inline-block;margin:4px 5px 0 0;padding:4px 11px;border-radius:16px;
+    font-size:13px;font-weight:600}
+  .chip.ok{background:#1f9d57;color:#fff}
+  .chip.skip{background:#e0a106;color:#3a2c00}
+  /* 狀態色塊 */
+  table.flags{width:100%;border-collapse:collapse;font-size:14px;margin:8px 0}
+  table.flags th,table.flags td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}
+  table.flags th{background:#eef3fc;color:var(--blue-d)}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  .v1{color:var(--green);font-weight:700}
+  .v0{color:var(--red);font-weight:700}
+  code.k{background:#eef3fc;border:1px solid #d4ddf0;border-radius:5px;padding:1px 6px;
+    font-family:ui-monospace,Menlo,monospace;font-size:13px;color:var(--blue-d)}
+  /* 統計卡 */
+  .stats{display:flex;gap:14px;flex-wrap:wrap;margin:8px 0}
+  .stat{flex:1;min-width:150px;background:var(--card);border:1px solid var(--line);
+    border-radius:12px;padding:18px;text-align:center}
+  .stat .n{font-size:28px;font-weight:800;color:var(--blue)}
+  .stat .l{font-size:13px;color:var(--muted);margin-top:2px}
+  .stat.green .n{color:var(--green)} .stat.amber .n{color:var(--amber)} .stat.grey .n{color:var(--grey)}
+  .cmp{width:100%;border-collapse:collapse;font-size:14.5px;margin:10px 0}
+  .cmp th,.cmp td{border:1px solid var(--line);padding:10px 12px;text-align:center}
+  .cmp th{background:#eef3fc}
+  .cmp .win{background:#e7f7f4;font-weight:700;color:var(--teal)}
+  .note{background:#fff8e6;border:1px solid #f0d79a;border-radius:10px;padding:13px 16px;font-size:14px;margin:14px 0}
+  .foot{margin-top:50px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:13px;text-align:center}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>推薦論文查詢系統 — 運作流程說明</h1>
+  <p>使用者推薦 → ProQuest 查詢 → 館員採購清單　的完整資料流與狀態變化</p>
+  <span class="tag">更新日期 2026-06-27 ｜ 含 ck_flag / valid 狀態說明</span>
+</header>
+
+<div class="wrap">
+
+<!-- 1 -->
+<h2>1. 系統概觀：兩張表的分工</h2>
+<p class="sub">整個系統由兩張表構成，一張記「誰想要」，一張記「PQ 上的事實」。</p>
+<div class="tables">
+  <div class="tbl req">
+    <h4>📥 recommends</h4>
+    <div class="code">需求／請求日誌</div>
+    <ul>
+      <li>每筆使用者推薦就新增一列</li>
+      <li>同一 DOI 多次推薦 → 累加 <code class="k">times</code></li>
+      <li>書目欄位（title…）一開始是空的，查到後回填</li>
+      <li>帶有 <code class="k">ck_flag</code>、<code class="k">valid</code> 狀態</li>
+    </ul>
+  </div>
+  <div class="rel">多筆 →<br>對應一筆<br>（doi）</div>
+  <div class="tbl pq">
+    <h4>📚 recommends_on_pq</h4>
+    <div class="code">ProQuest 來源真實資料（快取）</div>
+    <ul>
+      <li>一個 DOI 一列（PQ 上的權威資料）</li>
+      <li>存 <code class="k">pq_id</code>、title、author、year、school…</li>
+      <li>是「真相表」，供 recommends 回填與比對</li>
+      <li>查到的下次直接取用，不必再打 PQ</li>
+    </ul>
+  </div>
+</div>
+
+<!-- 2 -->
+<h2>2. 完整資料流</h2>
+
+<h3>使用者何時進入推薦？（觸發動線）</h3>
+<p class="sub">入口是 <code class="k">/doc/{doi}</code>（全文預覽）。使用者多半<b>從 ProQuest 點某篇論文要看全文</b>而來；只要聯盟<b>尚未收錄（<code class="k">Rawdata</code> 查無）</b>，就進入推薦流程。</p>
+<pre class="mermaid">
+flowchart TD
+    PQ([使用者在 ProQuest 找到論文<br/>點選想看全文]) --> DOC["/doc/{doi}<br/>全文預覽入口"]
+    DOC --> RAW{Rawdata<br/>已收錄?}
+    RAW -->|是 已購| FULL[直接提供全文 ✅<br/>不產生推薦]:::ok
+    RAW -->|否 未收錄| AUTO[🤖 自動記錄被動推薦<br/>active=0]:::pas
+    AUTO --> OPAC["轉到 OPAC 頁<br/>『尚未收錄，歡迎推薦給圖書館』"]
+    OPAC --> CLICK{使用者點<br/>【我要全文】?}
+    CLICK -->|是| FORM[填推薦表單<br/>姓名／系所／研究主題]
+    FORM --> ACTIVE[🙋 主動推薦<br/>active=1]:::act
+    CLICK -->|否| LEAVE([離開])
+    classDef ok fill:#e7f7f4,stroke:#1f9d57,color:#0a4a2a;
+    classDef pas fill:#eef3fc,stroke:#3b6fd6,color:#1a2b4a;
+    classDef act fill:#e7f7f4,stroke:#0f9b8e,color:#0a4a44;
+</pre>
+<div class="note">📍 <b>被動推薦＝想看未收錄全文時「自動產生」</b>（使用者沒特別做什麼）；<b>主動推薦＝再進一步點【我要全文】填表單</b>。兩者都從 <code class="k">/doc/{doi}</code> 入口延伸。</div>
+
+<h3>推薦的兩種來源：主動 vs 被動（<code class="k">active</code> 欄位）</h3>
+<div class="tables">
+  <div class="tbl pq">
+    <h4>🙋 主動推薦（active=1）</h4>
+    <div class="code">RecommendController@store · 推薦表單</div>
+    <ul>
+      <li>使用者<b>主動填寫推薦表單</b>（姓名／系所／研究主題／Email）</li>
+      <li>針對已顯示、已知的論文（表單由 recommends_on_pq 預填）</li>
+      <li>約 <b>2,936</b> 筆</li>
+    </ul>
+  </div>
+  <div class="tbl req">
+    <h4>🤖 被動推薦（active=0，預設）</h4>
+    <div class="code">PagesController@fullTextPreview · 自動記錄</div>
+    <ul>
+      <li>使用者想看<b>未收錄論文的全文</b> → 系統<b>自動記錄</b>此需求</li>
+      <li>常缺書目，需 PQ 查詢補齊</li>
+      <li>約 <b>48,427</b> 筆（大宗）</li>
+    </ul>
+  </div>
+</div>
+<div class="note">⚙️ 排程命令 <code class="k">ddc:pq-recommend</code> 的查詢對象<b>只限被動推薦（active=0）</b>且尚無書目者——主動推薦的論文在填表時資料通常已知、不需再查。館員列表的「<b>方式</b>」欄即顯示 主動／被動。</div>
+
+<h3>從推薦到館員清單的全流程</h3>
+<pre class="mermaid">
+flowchart TD
+    ACT([主動：填推薦表單<br/>active=1]) --> REC[(recommends)]
+    PAS([被動：想看未收錄全文<br/>active=0]) --> CHK{recommends_on_pq<br/>快取已有?}
+    CHK -->|有| HIT[直接帶入書目<br/>ck_flag=1]
+    CHK -->|無| ND[新增 recommends<br/>ck_flag=no_doi, valid=1（預設）]
+    HIT --> REC
+    ND --> REC
+
+    REC --> CMD[[排程命令 ddc:pq-recommend<br/>僅查 active=0 被動]]
+    CMD --> P1[Phase 1 垃圾過濾<br/>掃描器探測 → 無效DOI]
+    CMD --> P2[Phase 2 快取回填<br/>已在 PQ 快取 → 查詢成功]
+    CMD --> P3[Phase 3 Batched 查詢<br/>dispub OR 一次 20 筆]
+
+    P3 --> Q{ProQuest<br/>找到?}
+    Q -->|是| OK[寫入 recommends_on_pq<br/>回填 recommends<br/>ck_flag=查詢成功 · valid=1]
+    Q -->|否| NF[ck_flag=查無相關結果<br/>valid=0]
+    OK --> PQT[(recommends_on_pq 快取)]
+    OK --> REC
+
+    REC --> MGR([館員後台 /manager<br/>使用者推薦採購論文列表])
+    NF --> REC
+
+    classDef ok fill:#e7f7f4,stroke:#0f9b8e,color:#0a4a44;
+    classDef bad fill:#fdeceb,stroke:#d6453b,color:#7a1c16;
+    classDef store fill:#eef3fc,stroke:#3b6fd6,color:#1a2b4a;
+    class OK ok; class NF,ND bad; class REC,PQT store;
+</pre>
+
+<!-- 3 -->
+<h2>3. <code class="k">ck_flag</code> 與 <code class="k">valid</code> 的變動</h2>
+<div class="card" style="background:#eef3fc">
+  <p style="margin:0"><b>一句話分辨：</b><code class="k">ck_flag</code> 記「<b>為什麼／到哪一步</b>」（多值字串、狀態機）；
+  <code class="k">valid</code> 記「<b>能不能用</b>」（0/1 結論）。<b>valid 是結論，ck_flag 是理由</b>——兩者在成功/失敗時一起被寫。</p>
+</div>
+
+<h3>狀態流轉</h3>
+<pre class="mermaid">
+flowchart LR
+    S([初始]) --> ND[no_doi<br/>前台未查到/未送 PQ]
+    S --> Z[0 / 1 / 空<br/>早期初始態]
+    ND --> OK[查詢成功 · valid=1]:::ok
+    Z --> OK
+    ND --> NF[查無相關結果 · valid=0]:::bad
+    ND --> INV[無效DOI · valid=0]:::bad
+    NF -. 一次性重查救回 .-> OK
+    OK --> DONE([可顯示給館員 ✅])
+
+    classDef ok fill:#e7f7f4,stroke:#1f9d57,color:#0a4a2a;
+    classDef bad fill:#fdeceb,stroke:#d6453b,color:#7a1c16;
+</pre>
+
+<h3>所有 ck_flag 狀態一覽</h3>
+<table class="flags">
+  <tr><th>ck_flag</th><th>意義</th><th>valid</th><th>產生於</th></tr>
+  <tr><td><span class="dot" style="background:#8a97ad"></span><code class="k">no_doi</code></td><td>前台查不到 DOI／尚未經 PQ 查詢（初始）</td><td class="v0">0</td><td>前台 PagesController</td></tr>
+  <tr><td><span class="dot" style="background:#8a97ad"></span><code class="k">0 / 1 / (空)</code></td><td>早期匯入或中間狀態</td><td>—</td><td>舊資料</td></tr>
+  <tr><td><span class="dot" style="background:#1f9d57"></span><code class="k">查詢成功</code></td><td>PQ 查到並完成書目回填</td><td class="v1">1</td><td>Phase 2 快取 / Phase 3 Batched</td></tr>
+  <tr><td><span class="dot" style="background:#d6453b"></span><code class="k">查無相關結果</code></td><td>Batched 結果頁找不到此 dispub</td><td class="v0">0</td><td>Phase 3 / 重查</td></tr>
+  <tr><td><span class="dot" style="background:#d6453b"></span><code class="k">查無此篇論文</code></td><td>（舊逐筆）有結果頁但無對應項目</td><td class="v0">0</td><td>舊 search()</td></tr>
+  <tr><td><span class="dot" style="background:#e0a106"></span><code class="k">尚未提供調閱</code></td><td>PQ 詳細頁顯示 Document Unavailable</td><td class="v0">0</td><td>舊 search()</td></tr>
+  <tr><td><span class="dot" style="background:#e0a106"></span><code class="k">取得資料非原始指定之DOI</code></td><td>PQ 回傳的是不同 DOI</td><td class="v0">0</td><td>insertFromPq</td></tr>
+  <tr><td><span class="dot" style="background:#d6453b"></span><code class="k">無效DOI</code></td><td>垃圾／掃描器探測（nonexistingurl、admin.php3…）</td><td class="v0">0</td><td>Phase 1 垃圾過濾</td></tr>
+</table>
+<div class="note">💡 <code class="k">查無此篇論文</code>、<code class="k">查無相關結果</code>、<code class="k">尚未提供調閱</code>、<code class="k">取得資料非原始指定之DOI</code>、<code class="k">無效DOI</code> 是<b>終結狀態</b>，排程不會重複查詢它們（避免一直重打已知無解的）。而<b>「一次性重查以前查無」</b>是<b>手動的一次性補救</b>（把查無此篇／查無相關結果再撈出來重查），<b>不在排程 <code class="k">ddc:pq-recommend</code> 內</b>——本次已執行、救回 13 筆；日後要再追溯需再手動跑一次（或做成可重複執行的指令）。</div>
+
+<!-- 4 -->
+<h2>4. Batched 查詢機制（效率核心）</h2>
+<p class="sub">以前一個 DOI 打一次 PQ；現在用布林 <code class="k">OR</code> 一次查 20 筆。</p>
+<pre class="mermaid">
+flowchart LR
+    A[20 個 DOI] --> B["組成查詢字串<br/>dispub(A) OR dispub(B) OR …"]
+    B --> C[1 個搜尋請求]
+    C --> D[ProQuest 結果頁<br/>一頁 20 筆結果]
+    D --> E[逐筆解析<br/>title · author · 校 · 年 · pq_id]
+    E --> F[以 span.hit（=dispub）<br/>對應回每個請求 DOI]
+    F --> G{有對到?}
+    G -->|是| H[查詢成功 · valid=1]:::ok
+    G -->|否| I[查無相關結果 · valid=0]:::bad
+    classDef ok fill:#e7f7f4,stroke:#1f9d57,color:#0a4a2a;
+    classDef bad fill:#fdeceb,stroke:#d6453b,color:#7a1c16;
+</pre>
+
+<h3>欄位從哪來</h3>
+<div class="fmap">
+  <div class="fcol list">
+    <b>✅ 結果列表頁就有（batched 直接取）</b>
+    <div style="margin-top:8px">
+      <span class="chip ok">title 題名</span><span class="chip ok">author 作者</span>
+      <span class="chip ok">ddc_school 學校</span><span class="chip ok">year 出版年</span>
+      <span class="chip ok">pq_id（docview）</span>
+    </div>
+  </div>
+  <div class="fcol detail">
+    <b>⏭️ 只在詳細頁（目前不抓，留空）</b>
+    <div style="margin-top:8px">
+      <span class="chip skip">degree 學位</span>
+      <span class="chip skip">page 頁數</span>
+      <span class="chip skip">classification 分類碼</span>
+    </div>
+    <p style="font-size:13px;color:#7a5b00;margin:10px 0 0">degree／page／classification 館員清單都不顯示（比照 ProQuest）→ 為了效率刻意省略詳細頁。</p>
+  </div>
+</div>
+
+<h3>Batched 總共能查到哪些欄位？我們取用了哪些？</h3>
+<table class="flags">
+  <tr><th>欄位</th><th>結果列表頁（batched）可得</th><th>我們取用</th><th>寫入哪裡</th></tr>
+  <tr><td>title 題名</td><td>✅ <code class="k">a.previewTitle</code></td><td class="v1">✅</td><td>recommends_on_pq.title → recommends.title</td></tr>
+  <tr><td>author 作者</td><td>✅ <code class="k">span.truncatedAuthor</code></td><td class="v1">✅</td><td>.author</td></tr>
+  <tr><td>year 出版年</td><td>✅ <code class="k">span.dissertpub</code></td><td class="v1">✅</td><td>.year</td></tr>
+  <tr><td>school 學校</td><td>✅ <code class="k">span.dissertpub</code></td><td class="v1">✅</td><td>.school → recommends.ddc_school</td></tr>
+  <tr><td>pq_id（PQ 文件 ID）</td><td>✅ <code class="k">docview</code> 連結</td><td class="v1">✅</td><td>recommends_on_pq.pq_id（組 PQ 連結）</td></tr>
+  <tr><td>dispub 論文編號</td><td>✅ <code class="k">span.hit</code></td><td class="v1">✅</td><td>對應請求用（即 doi 本身）</td></tr>
+  <tr><td>degree 學位</td><td>❌ 只在詳細頁</td><td class="v0">✖ 留空</td><td>null</td></tr>
+  <tr><td>page 頁數</td><td>❌ 只在詳細頁</td><td class="v0">✖</td><td>null</td></tr>
+  <tr><td>classification 分類碼</td><td>❌ 只在詳細頁</td><td class="v0">✖</td><td>null</td></tr>
+  <tr><td>全文/PDF 可得性、引用數、訂購連結</td><td>✅ 列表頁可見</td><td class="v0">✖ 未存</td><td>—</td></tr>
+</table>
+<div class="note">📌 一句話：<b>batched 拿得到的就是「結果列表頁」上那幾欄</b>（題名／作者／年／校／pq_id／編號）；<b>degree / page / classification 不在列表頁</b>，要逐篇點詳細頁才有——為效率刻意不取。</div>
+
+<h3>效率對比</h3>
+<table class="cmp">
+  <tr><th>方式</th><th>每筆請求數</th><th>每筆耗時</th><th>5,000 筆估時</th><th>觸發次數上限風險</th></tr>
+  <tr><td>舊：逐筆 (per-DOI)</td><td>2（搜尋＋詳細頁）</td><td>~7 秒</td><td>~9 小時</td><td>高</td></tr>
+  <tr><td class="win">新：Batched（20/批）</td><td class="win">1／20 筆</td><td class="win">~0.7 秒</td><td class="win">~40 分鐘</td><td class="win">低（請求少 20–40×）</td></tr>
+</table>
+
+<!-- 5 -->
+<h2>5. 韌性機制</h2>
+<div class="card">
+  <ul style="margin:0;padding-left:20px">
+    <li><b>退避重試 ＋ IP↔帳號自動切換</b>：初始化（登入/widget）失敗時，遞增退避後重新初始化，並在可用的 auth 模式間切換重試，連續失敗才放棄。</li>
+    <li><b>t:ac 取空偵測</b>：ProQuest 改版導致路由 token 取不到時，<b>立即視為失敗並記錄</b>，而非默默對每筆回「查無」（這正是先前全站查詢失效的根因）。</li>
+    <li><b>整批略過防護</b>：單一批次遇 VPN／DB 抖動或解析異常 → 跳過該批、留待重跑，不中斷整體。</li>
+    <li><b>DOI 正規化</b>：查詢前去尾端句點/空白（<code class="k">10746160.</code> → <code class="k">10746160</code>）；垃圾型（掃描器探測）直接標 <code class="k">無效DOI</code> 不浪費請求。</li>
+  </ul>
+</div>
+<div class="note">⚠️ recommends / recommends_on_pq 位於遠端 AWS（<code class="k">mysql_ddc_suggest</code>），本機需<b>經 VPN</b> 連線；VPN 一斷即出現 DB 逾時。正式長跑建議在<b>伺服器內網</b>執行，最穩。</div>
+
+<!-- 6 -->
+<h2>6. 本次回填成果</h2>
+<div class="stats">
+  <div class="stat green"><div class="n">6,627</div><div class="l">查詢成功（累計 distinct）</div></div>
+  <div class="stat"><div class="n">+13</div><div class="l">重查救回的舊「查無」</div></div>
+  <div class="stat amber"><div class="n">220</div><div class="l">略過待重跑（no_doi）</div></div>
+  <div class="stat grey"><div class="n">332</div><div class="l">無效DOI（垃圾，已排除）</div></div>
+</div>
+<p class="sub">其餘 ~370 筆為真正查無 / 尚未提供調閱 / 非原始 DOI，維持終結狀態。剩 220 筆略過的再跑一次 <code class="k">ddc:pq-recommend</code> 即可清掉。</p>
+
+<!-- 7 -->
+<h2>7. 館員看到什麼（/manager）</h2>
+<div class="card" style="font-family:ui-monospace,Menlo,monospace;font-size:13.5px;background:#fbfcfe">
+  日期　｜單位｜系所｜身分｜推薦人｜研究主題｜
+  <b>論文資訊</b>＝ <span style="color:#3b6fd6">[doi→PQ連結]</span> title / author / 學校 / year
+  ｜方式（主動/被動）｜推薦次數
+</div>
+<div class="note">📐 論文資訊欄已<b>比照 ProQuest 移除「學位 degree」</b>，格式為 <code class="k">[編號] 題名 / 作者 / 學校 / 年</code>（也因 batched 本就不取 degree，留著只會是空值）。範例：<code class="k">[31840446] Synthetic Biology… / Hayes, Madeline M / The University of Wisconsin - Madison / 2025</code>
+</div>
+
+<h3>清單的篩選條件</h3>
+<p class="sub">列表只顯示<b>同時</b>滿足三個條件的資料：</p>
+<table class="flags">
+  <tr><th>條件</th><th>用意</th></tr>
+  <tr><td><code class="k">valid = 1</code></td><td>有效（已查到真實書目）</td></tr>
+  <tr><td><code class="k">bought = 0</code></td><td>圖書館<b>尚未採購</b>——清單的本質就是「使用者想要、但還沒買」的論文</td></tr>
+  <tr><td><code class="k">ck_flag ≠ no_doi</code></td><td><b>不是多餘的！</b>因 <code class="k">valid</code> 預設＝1，未解的 no_doi 列也會是 valid=1（實測有 714 列 no_doi＋valid=1＋bought=0）；必須這條才能濾掉「無書目的未解需求」。</td></tr>
+</table>
+
+<h3>bought：採購後如何從清單消失</h3>
+<pre class="mermaid">
+flowchart LR
+    A[論文在推薦清單<br/>bought=0] --> B[圖書館採購<br/>匯入批次 Batch]
+    B --> C[論文進入 Rawdata<br/>收錄集合]
+    C --> D["Batch::updateBought()<br/>比對該批 DOI"]
+    D --> E[recommends.bought = 1]:::ok
+    E --> F[從館員清單消失 ✅<br/>使用者改為可直接看全文]
+    classDef ok fill:#e7f7f4,stroke:#1f9d57,color:#0a4a2a;
+</pre>
+<div class="note">🔁 形成閉環：<b>使用者推薦 → 圖書館採購入庫（Rawdata）→ <code class="k">bought=1</code> → 離開清單</b>。而且該論文一旦進 Rawdata，下次有人要看全文時（見第 2 節入口）就<b>直接提供全文、不再產生推薦</b>。</div>
+
+<div class="foot">
+  推薦論文查詢系統流程說明　·　核心程式：<code>app/Services/PQSearchService.php</code>、<code>app/Console/Commands/GetRecommendsOnPq.php</code>、<code>app/Models/{Recommend,RecommendsOnPq}.php</code>
+</div>
+
+</div>
+</body>
+</html>
