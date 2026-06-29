@@ -79,6 +79,10 @@
   .cmp th{background:#eef3fc}
   .cmp .win{background:#e7f7f4;font-weight:700;color:var(--teal)}
   .note{background:#fff8e6;border:1px solid #f0d79a;border-radius:10px;padding:13px 16px;font-size:14px;margin:14px 0}
+  .qa{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--blue);border-radius:10px;padding:12px 16px;margin:10px 0}
+  .qa b{color:var(--blue-d)}
+  .qa .a{font-size:14px;margin-top:5px;color:#33415c}
+  .qa .a code{background:#eef3fc;border-radius:4px;padding:1px 5px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:var(--blue-d)}
   .foot{margin-top:50px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:13px;text-align:center}
 </style>
 </head>
@@ -167,9 +171,9 @@ flowchart TD
 <h3>從推薦到館員清單的全流程</h3>
 <pre class="mermaid">
 flowchart TD
-    ACT([主動：填寫推薦表單<br/>active=1]) --> REC[(recommends)]
+    ACT([主動：填寫推薦表單<br/>active=1<br/>ck_flag=空, valid=1]) --> REC[(recommends)]
     PAS([被動：想看未收錄全文<br/>active=0]) --> CHK{recommends_on_pq<br/>快取已有?}
-    CHK -->|有| HIT[直接帶入書目<br/>ck_flag=1]
+    CHK -->|有| HIT[直接帶入書目<br/>ck_flag=1, valid=1]
     CHK -->|無| ND[新增 recommends<br/>ck_flag=no_doi, valid=1（預設）]
     HIT --> REC
     ND --> REC
@@ -205,7 +209,7 @@ flowchart TD
 <pre class="mermaid">
 flowchart LR
     S([初始]) --> ND[no_doi<br/>前台未查到/未送 PQ]
-    S --> Z[0 / 1 / 空<br/>早期初始態]
+    S --> Z[1：被動快取命中<br/>空：主動表單 · 0：AWS匯入]
     ND --> OK[查詢成功 · valid=1]:::ok
     Z --> OK
     ND --> NF[查無相關結果 · valid=0]:::bad
@@ -218,18 +222,22 @@ flowchart LR
 </pre>
 
 <h3>所有 ck_flag 狀態一覽</h3>
+<p class="sub">下表 valid 與「產生於」均依本機 <code class="k">ddc</code> 實際資料核對過。最後一欄標示新版 batched 流程是否仍會新增該狀態。</p>
 <table class="flags">
-  <tr><th>ck_flag</th><th>意義</th><th>valid</th><th>產生於</th></tr>
-  <tr><td><span class="dot" style="background:#8a97ad"></span><code class="k">no_doi</code></td><td>前台查不到 DOI／尚未經 PQ 查詢（初始）</td><td class="v0">0</td><td>前台 PagesController</td></tr>
-  <tr><td><span class="dot" style="background:#8a97ad"></span><code class="k">0 / 1 / (空)</code></td><td>早期匯入或中間狀態</td><td>—</td><td>舊資料</td></tr>
-  <tr><td><span class="dot" style="background:#1f9d57"></span><code class="k">查詢成功</code></td><td>PQ 查到並完成書目回填</td><td class="v1">1</td><td>Phase 2 快取 / Phase 3 Batched</td></tr>
-  <tr><td><span class="dot" style="background:#d6453b"></span><code class="k">查無相關結果</code></td><td>Batched 結果頁找不到此 dispub</td><td class="v0">0</td><td>Phase 3 / 重查</td></tr>
-  <tr><td><span class="dot" style="background:#d6453b"></span><code class="k">查無此篇論文</code></td><td>（舊逐筆）有結果頁但無對應項目</td><td class="v0">0</td><td>舊 search()</td></tr>
-  <tr><td><span class="dot" style="background:#e0a106"></span><code class="k">尚未提供調閱</code></td><td>PQ 詳細頁顯示 Document Unavailable</td><td class="v0">0</td><td>舊 search()</td></tr>
-  <tr><td><span class="dot" style="background:#e0a106"></span><code class="k">取得資料非原始指定之DOI</code></td><td>PQ 回傳的是不同 DOI</td><td class="v0">0</td><td>insertFromPq</td></tr>
-  <tr><td><span class="dot" style="background:#d6453b"></span><code class="k">無效DOI</code></td><td>垃圾／掃描器探測（nonexistingurl、admin.php3…）</td><td class="v0">0</td><td>Phase 1 垃圾過濾</td></tr>
+  <tr><th>ck_flag</th><th>意義</th><th>valid</th><th>產生於（哪段程式）</th><th>新 batched<br/>仍會產生?</th></tr>
+  <tr><td><span class="dot" style="background:#8a97ad"></span><code class="k">(空字串)</code></td><td><b>主動推薦</b>表單新增：表單未帶 ck_flag → 用欄位<b>預設空字串</b>（書目已隨表單填好）</td><td class="v1">1</td><td>主動 RecommendController@store</td><td>✅</td></tr>
+  <tr><td><span class="dot" style="background:#1f9d57"></span><code class="k">1</code></td><td><b>被動推薦</b>建立當下，快取 recommends_on_pq <b>已有</b>該論文 → 直接帶書目</td><td class="v1">1</td><td>被動 PagesController（即時命中）</td><td>✅</td></tr>
+  <tr><td><span class="dot" style="background:#8a97ad"></span><code class="k">no_doi</code></td><td><b>被動推薦</b>建立當下，快取<b>沒有</b>、尚未經 PQ 解析</td><td class="v1">1（預設）</td><td>被動 PagesController</td><td>✅</td></tr>
+  <tr><td><span class="dot" style="background:#8a97ad"></span><code class="k">0</code></td><td>由 <code class="k">GetSuggestOnAws</code> 從 AWS 匯入 suggest 資料時的固定值</td><td class="v1">1</td><td>GetSuggestOnAws 匯入指令</td><td>該指令執行時</td></tr>
+  <tr><td><span class="dot" style="background:#1f9d57"></span><code class="k">查詢成功</code></td><td>排程把未解列補上書目（快取回填 或 PQ 查到）</td><td class="v1">1</td><td>Phase 2 快取 / Phase 3 Batched</td><td>✅</td></tr>
+  <tr><td><span class="dot" style="background:#d6453b"></span><code class="k">查無相關結果</code></td><td>Batched 結果頁找不到此 dispub</td><td class="v0">0</td><td>Phase 3 / 重查</td><td>✅</td></tr>
+  <tr><td><span class="dot" style="background:#d6453b"></span><code class="k">無效DOI</code></td><td>垃圾／掃描器探測（nonexistingurl、admin.php3…）</td><td class="v0">0</td><td>Phase 1 垃圾過濾</td><td>✅</td></tr>
+  <tr><td><span class="dot" style="background:#e0a106"></span><code class="k">查無此篇論文</code></td><td>（舊逐筆）有結果頁但無對應項目</td><td class="v0">0</td><td>舊 search()</td><td>❌ 改回查無相關結果</td></tr>
+  <tr><td><span class="dot" style="background:#e0a106"></span><code class="k">尚未提供調閱</code></td><td>PQ 詳細頁顯示 Document Unavailable</td><td class="v0">0</td><td>舊 search()（詳細頁）</td><td>❌ batched 不點詳細頁</td></tr>
+  <tr><td><span class="dot" style="background:#e0a106"></span><code class="k">取得資料非原始指定之DOI</code></td><td>PQ 回傳的是不同 DOI</td><td class="v0">0</td><td>舊 insertFromPq</td><td>❌</td></tr>
 </table>
-<div class="note">💡 <code class="k">查無此篇論文</code>、<code class="k">查無相關結果</code>、<code class="k">尚未提供調閱</code>、<code class="k">取得資料非原始指定之DOI</code>、<code class="k">無效DOI</code> 是<b>終結狀態</b>，排程不會重複查詢它們（避免一直重試已知無解的請求）。而<b>「一次性重查以前查無」</b>是<b>手動的一次性補救</b>（把查無此篇／查無相關結果再撈出來重查），<b>不在排程 <code class="k">ddc:pq-recommend</code> 內</b>——本次已執行、救回 13 筆；日後要再追溯需再手動執行一次（或做成可重複執行的指令）。</div>
+<div class="note">💡 <code class="k">查無此篇論文</code>、<code class="k">查無相關結果</code>、<code class="k">尚未提供調閱</code>、<code class="k">取得資料非原始指定之DOI</code>、<code class="k">無效DOI</code> 是<b>終結狀態</b>，排程不會重複查詢它們（避免一直重試已知無解的請求）。而<b>「一次性重查以前查無」</b>是<b>手動的一次性補救</b>（把查無此篇／查無相關結果再撈出來重查），<b>不在排程 <code class="k">ddc:pq-recommend</code> 內</b>——本次已執行、救回 13 筆；日後要再追溯需再手動執行一次（也已做成 <code class="k">ddc:pq-recommend --recheck</code> 可重複執行）。</div>
+<div class="note">🔎 <b>排程指令的撈件條件</b>（同事常問）：<code class="k">active=0</code> 且 <code class="k">bought=0</code> 且 <b><code class="k">title</code> 為空</b> 且 <code class="k">ck_flag</code> <b>不在</b>上列 5 個終結狀態內。所以 <code class="k">ck_flag</code> <b>有</b>過濾（排除終結狀態），<code class="k">valid</code> <b>沒有</b>過濾——真正的關鍵是「<b>title 還是空的</b>（＝尚未補到書目）」。流程上 Phase 2 會<b>先批次比對 recommends_on_pq 快取</b>，命中就直接回填（ck_flag 改 <code class="k">查詢成功</code>、不打 PQ），剩下的才送 batched 查詢。</div>
 
 <!-- 4 -->
 <h2>4. Batched 查詢機制（效率核心）</h2>
@@ -344,6 +352,40 @@ flowchart LR
     classDef ok fill:#e7f7f4,stroke:#1f9d57,color:#0a4a2a;
 </pre>
 <div class="note">🔁 形成完整循環：<b>使用者推薦 → 圖書館採購入庫（Rawdata）→ <code class="k">bought=1</code> → 離開清單</b>。而且該論文一旦進入 Rawdata，下次有人要看全文時（見第 2 節入口）就<b>直接提供全文、不再產生推薦</b>。</div>
+
+<!-- 8 FAQ -->
+<h2>8. FAQ — 常見問題彙整</h2>
+<p class="sub">彙整本次開發與同仁提出的問題（ck_flag/valid、主動被動、batched、bought、登入語系、廢棄程式等）。</p>
+
+<div class="qa"><b>Q1．<code class="k">ck_flag</code> 和 <code class="k">valid</code> 差在哪？</b><div class="a"><code>ck_flag</code> 記「<b>為什麼／到哪一步</b>」（多值狀態機字串）；<code>valid</code> 記「<b>能不能用</b>」（0/1 結論）。valid 是結論、ck_flag 是理由，兩者在成功／失敗時一起被寫。</div></div>
+
+<div class="qa"><b>Q2．剛新增 recommends 時 valid 是多少？</b><div class="a"><code>valid</code> 預設 ＝ <b>1</b>。不論主動、被動或 no_doi，一開始都是 valid=1；之後查無才會被改成 0。</div></div>
+
+<div class="qa"><b>Q3．主動推薦寫入的 ck_flag 是什麼？是 1 嗎？</b><div class="a">不是。主動表單沒帶 ck_flag → 用欄位<b>預設空字串 <code>''</code></b>，valid=1。（實測全表空字串 ck_flag 全部是 active=1）</div></div>
+
+<div class="qa"><b>Q4．<code class="k">ck_flag='1'</code> 和 <code class="k">'查詢成功'</code> 差在哪？</b><div class="a">兩者都代表「有書目」，但時間點不同：<b>1</b> ＝被動推薦<b>建立當下</b>快取就命中（PagesController 即時帶入）；<b>查詢成功</b> ＝<b>排程事後</b>把未解列補上（Phase 2 快取回填／Phase 3 PQ 查到）。</div></div>
+
+<div class="qa"><b>Q5．<code class="k">ck_flag=0</code> 和空字串何時出現？</b><div class="a">空字串 ＝主動推薦表單；<code>0</code> ＝（已廢棄的）<code>GetSuggestOnAws</code> 從 AWS <code>member</code> 匯入時寫死的值。</div></div>
+
+<div class="qa"><b>Q6．排程指令的撈件條件？ck_flag／valid 有過濾嗎？</b><div class="a">條件 ＝ <code>active=0</code> 且 <code>bought=0</code> 且 <b>title 為空</b> 且 ck_flag 不在 5 個終結狀態。<b>ck_flag 有</b>過濾（排除終結狀態）、<b>valid 沒有</b>過濾；真正關鍵是「title 還空著（尚未補書目）」。</div></div>
+
+<div class="qa"><b>Q7．哪些 ck_flag 新 batched 流程不會再產生？</b><div class="a"><code>查無此篇論文</code>、<code>尚未提供調閱</code>、<code>取得資料非原始指定之DOI</code>（皆來自舊逐筆 search()／insertFromPq）。batched 查無一律記 <code>查無相關結果</code>。</div></div>
+
+<div class="qa"><b>Q8．使用者什麼時候進入推薦流程？</b><div class="a">從 ProQuest 點某篇論文要看全文 → 連到 <code>/doc/{doi}</code>。若聯盟未收錄（<code>Rawdata</code> 查無）→ 自動記被動推薦並轉 OPAC 頁；使用者再點【我要全文】填表單 → 主動推薦。</div></div>
+
+<div class="qa"><b>Q9．主動 vs 被動推薦差在哪？</b><div class="a">主動（active=1）＝使用者主動填推薦表單；被動（active=0，預設）＝想看未收錄全文時系統自動記錄。排程只處理被動的（主動的填表時資料已知）。</div></div>
+
+<div class="qa"><b>Q10．館員清單篩選的 <code class="k">ck_flag≠no_doi</code> 是多餘的嗎？</b><div class="a">不是。valid 預設=1，未解的 no_doi 也是 valid=1；只靠 valid=1 擋不掉它們（實測 714 列 no_doi+valid=1+bought=0），必須這條才能濾掉「無書目的未解需求」。</div></div>
+
+<div class="qa"><b>Q11．Batched 能查到哪些欄位？degree 為何留空？</b><div class="a">結果列表頁就有 title／author／年／校／pq_id；degree／page／classification 只在詳細頁，為效率不點詳細頁（且 degree 已比照 ProQuest 從館員顯示移除）。</div></div>
+
+<div class="qa"><b>Q12．bought 怎麼讓論文從清單消失？</b><div class="a">圖書館採購入庫（進 <code>Rawdata</code>）後，<code>Batch::updateBought()</code> 把該 DOI 的 recommends 設 <code>bought=1</code> → 從清單消失，之後使用者可直接看全文。</div></div>
+
+<div class="qa"><b>Q13．「一次性重查以前查無」何時執行？</b><div class="a">不在自動排程。手動執行 <code>ddc:pq-recommend --recheck</code>（把查無此篇／查無相關結果再撈出來重查，找到的救回、仍查無的不動）。</div></div>
+
+<div class="qa"><b>Q14．登入 ProQuest 有先切換語系嗎？切繁中嗎？</b><div class="a">沒有切繁中。帳號登入會切<b>英文</b>（爬蟲解析依賴英文標記）；目前 IP 模式則不做任何切換。</div></div>
+
+<div class="qa"><b>Q15．<code class="k">GetSuggestOnAws</code>（ddc:aws-suggest）還需要嗎？</b><div class="a"><b>不需要</b>。它讀的 AWS <code>member</code> 表已不存在（遠端／本機都查無），跑了會報錯，屬死碼；建議連同 <code>SuggestMember</code> model 與 <code>ddc_aws_suggest.bat</code> 一併移除。推薦解析已統一於 <code>ddc:pq-recommend</code>。</div></div>
 
 <div class="foot">
   推薦論文查詢系統流程說明 · 核心程式：<code>app/Services/PQSearchService.php</code>、<code>app/Console/Commands/GetRecommendsOnPq.php</code>、<code>app/Models/{Recommend,RecommendsOnPq}.php</code>
